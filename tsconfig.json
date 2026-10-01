@@ -1,0 +1,29 @@
+{
+  "compilerOptions": {
+    // Layout
+    "rootDir": "./src",
+    "outDir": "./dist",
+
+    // Ambiente
+    "module": "commonjs",
+    "target": "es2022",
+    "lib": ["es2022"],
+    "types": ["node"],
+    "esModuleInterop": true,
+
+    // Saídas
+    "sourceMap": true,
+    "declaration": false,
+
+    // Rigor
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "exactOptionalPropertyTypes": false,
+
+    // Outros
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "resolveJsonModule": true
+  },
+  "include": ["src/**/*"]
+}

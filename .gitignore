@@ -1,0 +1,30 @@
+# Dependências instaladas
+node_modules/
+
+# Build do TypeScript
+dist/
+build/
+
+# Variáveis de Ambiente e ficheiros sensíveis (passwords, segredos)
+.env
+.env.local
+.env.*.local
+
+# Logs e ficheiros temporários do sistema
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Ficheiros e pastas do SO ou Editores
+.DS_Store
+Thumbs.db
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+
+# Cache do Docker / Cobertura de Testes
+.docker/
+coverage/

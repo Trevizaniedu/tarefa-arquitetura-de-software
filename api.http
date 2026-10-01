@@ -1,0 +1,59 @@
+### 1. Criar Agendamento com Sucesso (Retorna 201 Created)
+POST http://localhost:3000/agendamentos
+Content-Type: application/json
+Idempotency-Key: chave-teste-001
+X-Correlation-ID: req-uuid-abc-123
+
+{
+  "clienteId": "cli-111",
+  "barbeiroId": "barbeiro-999",
+  "servicoId": "corte-cabelo",
+  "dataHoraInicio": "2026-10-15T14:00:00.000Z",
+  "duracaoMinutos": 30
+}
+
+###
+
+### 2. Testar Idempotência no Redis (Mesma Idempotency-Key)
+# Deve retornar a resposta salva no Redis instantaneamente sem duplicar no banco
+POST http://localhost:3000/agendamentos
+Content-Type: application/json
+Idempotency-Key: chave-teste-001
+
+{
+  "clienteId": "cli-111",
+  "barbeiroId": "barbeiro-999",
+  "servicoId": "corte-cabelo",
+  "dataHoraInicio": "2026-10-15T14:00:00.000Z",
+  "duracaoMinutos": 30
+}
+
+###
+
+### 3. Testar Conflito de Horário - RFC 7807 (Retorna 409 Conflict)
+# Tenta agendar para o mesmo barbeiro no mesmo horário, mas com OUTRA chave de idempotência
+POST http://localhost:3000/agendamentos
+Content-Type: application/json
+Idempotency-Key: chave-teste-002
+
+{
+  "clienteId": "cli-222",
+  "barbeiroId": "barbeiro-999",
+  "servicoId": "barba",
+  "dataHoraInicio": "2026-10-15T14:15:00.000Z",
+  "duracaoMinutos": 30
+}
+
+###
+
+### 4. Testar Falha de Idempotency-Key Ausente (Retorna 400 Bad Request)
+POST http://localhost:3000/agendamentos
+Content-Type: application/json
+
+{
+  "clienteId": "cli-333",
+  "barbeiroId": "barbeiro-999",
+  "servicoId": "corte-cabelo",
+  "dataHoraInicio": "2026-10-15T16:00:00.000Z",
+  "duracaoMinutos": 30
+}
