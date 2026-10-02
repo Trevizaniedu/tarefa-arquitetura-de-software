@@ -5,10 +5,10 @@ Idempotency-Key: chave-teste-001
 X-Correlation-ID: req-uuid-abc-123
 
 {
-  "clienteId": "cli-111",
+  "clienteId": "cli-112",
   "barbeiroId": "barbeiro-999",
   "servicoId": "corte-cabelo",
-  "dataHoraInicio": "2026-10-15T14:00:00.000Z",
+  "dataHoraInicio": "2026-10-15T13:00:00.000Z",
   "duracaoMinutos": 30
 }
 
@@ -21,10 +21,10 @@ Content-Type: application/json
 Idempotency-Key: chave-teste-001
 
 {
-  "clienteId": "cli-111",
+  "clienteId": "cli-112",
   "barbeiroId": "barbeiro-999",
   "servicoId": "corte-cabelo",
-  "dataHoraInicio": "2026-10-15T14:00:00.000Z",
+  "dataHoraInicio": "2026-10-15T13:00:00.000Z",
   "duracaoMinutos": 30
 }
 
