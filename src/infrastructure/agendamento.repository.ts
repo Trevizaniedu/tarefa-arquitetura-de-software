@@ -1,8 +1,10 @@
 import { Pool } from 'pg';
-import { IAgendamentoRepository } from '../application/ports/agendamento-repository.interface';
-import { Agendamento } from '../domain/agendamento.entity';
+import {
+  FiltroAgendamentos,
+  IAgendamentoRepository,
+} from '../application/ports/agendamento-repository.interface';
+import { Agendamento, StatusAgendamento } from '../domain/agendamento.entity';
 
-// Pool de conexão com o PostgreSQL
 const pool = new Pool({
   connectionString:
     process.env.DATABASE_URL ||
@@ -10,10 +12,19 @@ const pool = new Pool({
 });
 
 export class AgendamentoRepository implements IAgendamentoRepository {
-  /**
-   * Consulta SQL para verificar sobreposição de intervalos de tempo:
-   * (InicioA < FimB) AND (FimA > InicioB)
-   */
+  private mapRowToEntity(row: any): Agendamento {
+    return new Agendamento({
+      id: row.id,
+      clienteId: row.cliente_id,
+      barbeiroId: row.barbeiro_id,
+      servicoId: row.servico_id,
+      dataHoraInicio: new Date(row.data_hora_inicio),
+      dataHoraFim: new Date(row.data_hora_fim),
+      status: row.status as StatusAgendamento,
+      correlationId: row.correlation_id ?? undefined,
+    });
+  }
+
   async existeConflitoDeHorario(
     barbeiroId: string,
     inicio: Date,
@@ -55,5 +66,67 @@ export class AgendamentoRepository implements IAgendamentoRepository {
     await pool.query(query, values);
 
     return agendamento;
+  }
+
+  async listar(filtros?: FiltroAgendamentos): Promise<Agendamento[]> {
+    const conditions: string[] = [];
+    const values: any[] = [];
+
+    if (filtros?.barbeiroId) {
+      values.push(filtros.barbeiroId);
+      conditions.push(`barbeiro_id = $${values.length}`);
+    }
+
+    if (filtros?.clienteId) {
+      values.push(filtros.clienteId);
+      conditions.push(`cliente_id = $${values.length}`);
+    }
+
+    if (filtros?.status) {
+      values.push(filtros.status);
+      conditions.push(`status = $${values.length}`);
+    }
+
+    const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+    const query = `
+      SELECT *
+      FROM agendamentos
+      ${whereClause}
+      ORDER BY data_hora_inicio ASC;
+    `;
+
+    const result = await pool.query(query, values);
+    return result.rows.map((row) => this.mapRowToEntity(row));
+  }
+
+  async buscarPorId(id: string): Promise<Agendamento | null> {
+    const query = `SELECT * FROM agendamentos WHERE id = $1 LIMIT 1;`;
+    const result = await pool.query(query, [id]);
+
+    if (result.rows.length === 0) {
+      return null;
+    }
+
+    return this.mapRowToEntity(result.rows[0]);
+  }
+
+  async atualizarStatus(
+    id: string,
+    status: StatusAgendamento
+  ): Promise<Agendamento | null> {
+    const query = `
+      UPDATE agendamentos
+      SET status = $1
+      WHERE id = $2
+      RETURNING *;
+    `;
+
+    const result = await pool.query(query, [status, id]);
+
+    if (result.rows.length === 0) {
+      return null;
+    }
+
+    return this.mapRowToEntity(result.rows[0]);
   }
 }

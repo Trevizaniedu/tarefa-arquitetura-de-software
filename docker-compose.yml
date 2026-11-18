@@ -24,8 +24,6 @@ services:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgrespassword
       POSTGRES_DB: barber_db
-    ports:
-      - "5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
       - ./scripts/init.sql:/docker-entrypoint-initdb.d/init.sql
@@ -39,8 +37,6 @@ services:
     image: redis:7-alpine
     container_name: barber_redis
     restart: always
-    ports:
-      - "6379:6379"
 
 volumes:
   pgdata:

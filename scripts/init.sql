@@ -28,3 +28,18 @@ CREATE TABLE IF NOT EXISTS agendamentos (
 
 CREATE INDEX IF NOT EXISTS idx_agendamentos_barbeiro_horario
   ON agendamentos (barbeiro_id, data_hora_inicio, data_hora_fim);
+
+-- Dados iniciais (Seed) para testes imediatos na VPS / Swagger
+INSERT INTO usuarios (id, nome, email, senha_hash, papel)
+VALUES
+  ('cli-001', 'Cliente Teste 01', 'cliente1@barbearia.com', 'hash_exemplo_123', 'CLIENTE'),
+  ('cli-101', 'Cliente Teste 101', 'cliente101@barbearia.com', 'hash_exemplo_123', 'CLIENTE'),
+  ('barbeiro-999', 'Barbeiro Principal', 'barbeiro@barbearia.com', 'hash_exemplo_123', 'BARBEIRO')
+ON CONFLICT (id) DO NOTHING;
+
+INSERT INTO servicos (id, nome, duracao_minutos, preco)
+VALUES
+  ('corte-cabelo', 'Corte de Cabelo Masculino', 30, 45.00),
+  ('barba-completa', 'Barba Completa', 30, 35.00),
+  ('corte-e-barba', 'Combo Corte + Barba', 60, 70.00)
+ON CONFLICT (id) DO NOTHING;
