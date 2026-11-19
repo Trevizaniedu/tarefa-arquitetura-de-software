@@ -71,6 +71,15 @@ const swaggerOptions: swaggerJsdoc.Options = {
             correlationId: { type: 'string', example: 'req-uuid-123' },
           },
         },
+        Servico: {
+          type: 'object',
+          properties: {
+            id: { type: 'string', example: 'corte-cabelo' },
+            nome: { type: 'string', example: 'Corte de Cabelo' },
+            duracaoMinutos: { type: 'integer', example: 30 },
+            preco: { type: 'number', example: 45.0 },
+          },
+        },
         ProblemDetails: {
           type: 'object',
           properties: {
@@ -128,6 +137,33 @@ const agendamentoController = new AgendamentoController(
  */
 app.get('/health', (_req, res) => {
   res.status(200).json({ status: 'ok' });
+});
+
+/**
+ * @openapi
+ * /servicos:
+ *   get:
+ *     summary: Lista todos os serviços disponíveis e seus preços
+ *     tags: [Serviços]
+ *     responses:
+ *       200:
+ *         description: Catálogo de serviços da barbearia retornado com sucesso.
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items:
+ *                 $ref: '#/components/schemas/Servico'
+ */
+app.get('/servicos', async (_req, res, next) => {
+  try {
+    const result = await authPool.query(
+      'SELECT id, nome, duracao_minutos AS "duracaoMinutos", preco::float AS preco FROM servicos ORDER BY preco ASC'
+    );
+    return res.status(200).json(result.rows);
+  } catch (err) {
+    next(err);
+  }
 });
 
 /**
