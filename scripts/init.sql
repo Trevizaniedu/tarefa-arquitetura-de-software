@@ -29,12 +29,13 @@ CREATE TABLE IF NOT EXISTS agendamentos (
 CREATE INDEX IF NOT EXISTS idx_agendamentos_barbeiro_horario
   ON agendamentos (barbeiro_id, data_hora_inicio, data_hora_fim);
 
--- Dados iniciais (Seed) para testes imediatos na VPS / Swagger
+-- Dados iniciais (Seed) para testes imediatos de JWT, RBAC e Agendamentos no Swagger
 INSERT INTO usuarios (id, nome, email, senha_hash, papel)
 VALUES
-  ('cli-001', 'Cliente Teste 01', 'cliente1@barbearia.com', 'hash_exemplo_123', 'CLIENTE'),
-  ('cli-101', 'Cliente Teste 101', 'cliente101@barbearia.com', 'hash_exemplo_123', 'CLIENTE'),
-  ('barbeiro-999', 'Barbeiro Principal', 'barbeiro@barbearia.com', 'hash_exemplo_123', 'BARBEIRO')
+  ('admin-001', 'Administrador Barbearia', 'admin@barbearia.com', '123456', 'ADMIN'),
+  ('barbeiro-999', 'Barbeiro Principal', 'barbeiro@barbearia.com', '123456', 'BARBEIRO'),
+  ('cli-001', 'Cliente Teste 01', 'cliente1@barbearia.com', '123456', 'CLIENTE'),
+  ('cli-101', 'Cliente Teste 101', 'cliente101@barbearia.com', '123456', 'CLIENTE')
 ON CONFLICT (id) DO NOTHING;
 
 INSERT INTO servicos (id, nome, duracao_minutos, preco)

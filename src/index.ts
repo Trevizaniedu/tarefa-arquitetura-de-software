@@ -1,11 +1,18 @@
 import express from 'express';
 import path from 'path';
+import jwt from 'jsonwebtoken';
+import { Pool } from 'pg';
 import swaggerUi from 'swagger-ui-express';
 import swaggerJsdoc from 'swagger-jsdoc';
 
 import { correlationIdMiddleware } from './interfaces/middleware/correlation-id.middleware';
 import { idempotencyMiddleware } from './interfaces/middleware/idempotency.middleware';
 import { errorHandlerMiddleware } from './interfaces/middleware/error-handler.middleware';
+import {
+  ensureAuthenticated,
+  requireRole,
+  JWT_SECRET,
+} from './interfaces/middleware/auth.middleware';
 import { AgendamentoController } from './interfaces/controllers/agendamento.controller';
 import { CriarAgendamentoUseCase } from './application/use-cases/criar-agendamento.use-case';
 import { ListarAgendamentosUseCase } from './application/use-cases/listar-agendamentos.use-case';
@@ -15,6 +22,10 @@ import { AgendamentoRepository } from './infrastructure/agendamento.repository';
 
 const app = express();
 const port = Number(process.env.PORT) || 3000;
+
+const authPool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+});
 
 app.use(express.json());
 
@@ -26,7 +37,7 @@ const swaggerOptions: swaggerJsdoc.Options = {
       title: 'API de Agendamento da Barbearia',
       version: '1.0.0',
       description:
-        'Contrato oficial da API desenvolvida com Clean Architecture, Express, PostgreSQL e Redis (Idempotência, Correlation ID e RFC 7807).',
+        'Contrato oficial da API desenvolvida com Clean Architecture, Express, PostgreSQL e Redis (JWT + RBAC, Idempotência, Correlation ID e RFC 7807).',
     },
     servers: [
       {
@@ -35,6 +46,13 @@ const swaggerOptions: swaggerJsdoc.Options = {
       },
     ],
     components: {
+      securitySchemes: {
+        bearerAuth: {
+          type: 'http',
+          scheme: 'bearer',
+          bearerFormat: 'JWT',
+        },
+      },
       schemas: {
         Agendamento: {
           type: 'object',
@@ -114,10 +132,120 @@ app.get('/health', (_req, res) => {
 
 /**
  * @openapi
+ * /auth/login:
+ *   post:
+ *     summary: Autentica um usuário e gera um token JWT com papel (RBAC)
+ *     tags: [Autenticação]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [email, senha]
+ *             properties:
+ *               email:
+ *                 type: string
+ *                 example: "admin@barbearia.com"
+ *               senha:
+ *                 type: string
+ *                 example: "123456"
+ *     responses:
+ *       200:
+ *         description: Autenticação realizada com sucesso.
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 accessToken:
+ *                   type: string
+ *                 usuario:
+ *                   type: object
+ *                   properties:
+ *                     id:
+ *                       type: string
+ *                     nome:
+ *                       type: string
+ *                     email:
+ *                       type: string
+ *                     papel:
+ *                       type: string
+ *                       enum: [ADMIN, BARBEIRO, CLIENTE]
+ *       401:
+ *         description: Credenciais inválidas (RFC 7807).
+ *         content:
+ *           application/problem+json:
+ *             schema:
+ *               $ref: '#/components/schemas/ProblemDetails'
+ */
+app.post('/auth/login', async (req, res, next) => {
+  try {
+    const { email, senha } = req.body;
+
+    if (!email || !senha) {
+      return res
+        .status(400)
+        .contentType('application/problem+json')
+        .json({
+          type: 'https://api.barbearia.com/erros/dados-invalidos',
+          title: 'Credenciais obrigatórias',
+          status: 400,
+          detail: 'Informe email e senha para autenticação.',
+          instance: req.originalUrl,
+          correlationId: req.headers['x-correlation-id'],
+        });
+    }
+
+    const result = await authPool.query(
+      'SELECT id, nome, email, senha_hash, papel FROM usuarios WHERE email = $1 LIMIT 1',
+      [email]
+    );
+
+    const user = result.rows[0];
+
+    if (!user || user.senha_hash !== senha) {
+      return res
+        .status(401)
+        .contentType('application/problem+json')
+        .json({
+          type: 'https://api.barbearia.com/erros/credenciais-invalidas',
+          title: 'Email ou senha incorretos',
+          status: 401,
+          detail: 'Não foi possível autenticar com as credenciais fornecidas.',
+          instance: req.originalUrl,
+          correlationId: req.headers['x-correlation-id'],
+        });
+    }
+
+    const accessToken = jwt.sign(
+      { sub: user.id, email: user.email, papel: user.papel },
+      JWT_SECRET,
+      { expiresIn: '2h' }
+    );
+
+    return res.status(200).json({
+      accessToken,
+      usuario: {
+        id: user.id,
+        nome: user.nome,
+        email: user.email,
+        papel: user.papel,
+      },
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * @openapi
  * /agendamentos:
  *   post:
  *     summary: Cria um novo agendamento de barbearia
  *     tags: [Agendamentos]
+ *     security:
+ *       - bearerAuth: []
  *     parameters:
  *       - in: header
  *         name: idempotency-key
@@ -151,7 +279,7 @@ app.get('/health', (_req, res) => {
  *               dataHoraInicio:
  *                 type: string
  *                 format: date-time
- *                 example: "2026-10-20T14:00:00.000Z"
+ *                 example: "2026-11-25T14:00:00.000Z"
  *               duracaoMinutos:
  *                 type: integer
  *                 example: 30
@@ -168,6 +296,12 @@ app.get('/health', (_req, res) => {
  *           application/problem+json:
  *             schema:
  *               $ref: '#/components/schemas/ProblemDetails'
+ *       401:
+ *         description: Não autenticado (RFC 7807).
+ *         content:
+ *           application/problem+json:
+ *             schema:
+ *               $ref: '#/components/schemas/ProblemDetails'
  *       409:
  *         description: Conflito de horário para o barbeiro informado (RFC 7807).
  *         content:
@@ -175,7 +309,7 @@ app.get('/health', (_req, res) => {
  *             schema:
  *               $ref: '#/components/schemas/ProblemDetails'
  */
-app.post('/agendamentos', idempotencyMiddleware, async (req, res, next) => {
+app.post('/agendamentos', ensureAuthenticated, idempotencyMiddleware, async (req, res, next) => {
   await agendamentoController.criar(req, res, next);
 });
 
@@ -185,6 +319,8 @@ app.post('/agendamentos', idempotencyMiddleware, async (req, res, next) => {
  *   get:
  *     summary: Lista todos os agendamentos (com filtros opcionais)
  *     tags: [Agendamentos]
+ *     security:
+ *       - bearerAuth: []
  *     parameters:
  *       - in: query
  *         name: barbeiroId
@@ -211,8 +347,10 @@ app.post('/agendamentos', idempotencyMiddleware, async (req, res, next) => {
  *               type: array
  *               items:
  *                 $ref: '#/components/schemas/Agendamento'
+ *       401:
+ *         description: Não autenticado (RFC 7807).
  */
-app.get('/agendamentos', async (req, res, next) => {
+app.get('/agendamentos', ensureAuthenticated, async (req, res, next) => {
   await agendamentoController.listar(req, res, next);
 });
 
@@ -222,6 +360,8 @@ app.get('/agendamentos', async (req, res, next) => {
  *   get:
  *     summary: Busca um agendamento pelo ID
  *     tags: [Agendamentos]
+ *     security:
+ *       - bearerAuth: []
  *     parameters:
  *       - in: path
  *         name: id
@@ -236,6 +376,8 @@ app.get('/agendamentos', async (req, res, next) => {
  *           application/json:
  *             schema:
  *               $ref: '#/components/schemas/Agendamento'
+ *       401:
+ *         description: Não autenticado (RFC 7807).
  *       404:
  *         description: Agendamento não encontrado (RFC 7807).
  *         content:
@@ -243,7 +385,7 @@ app.get('/agendamentos', async (req, res, next) => {
  *             schema:
  *               $ref: '#/components/schemas/ProblemDetails'
  */
-app.get('/agendamentos/:id', async (req, res, next) => {
+app.get('/agendamentos/:id', ensureAuthenticated, async (req, res, next) => {
   await agendamentoController.buscarPorId(req, res, next);
 });
 
@@ -251,8 +393,10 @@ app.get('/agendamentos/:id', async (req, res, next) => {
  * @openapi
  * /agendamentos/{id}/status:
  *   patch:
- *     summary: Atualiza o status de um agendamento
+ *     summary: Atualiza o status de um agendamento (Restrito a ADMIN e BARBEIRO)
  *     tags: [Agendamentos]
+ *     security:
+ *       - bearerAuth: []
  *     parameters:
  *       - in: path
  *         name: id
@@ -278,14 +422,23 @@ app.get('/agendamentos/:id', async (req, res, next) => {
  *           application/json:
  *             schema:
  *               $ref: '#/components/schemas/Agendamento'
+ *       401:
+ *         description: Não autenticado (RFC 7807).
+ *       403:
+ *         description: Acesso negado - papel insuficiente (RFC 7807).
  *       404:
  *         description: Agendamento não encontrado (RFC 7807).
  *       409:
  *         description: Transição de status inválida (RFC 7807).
  */
-app.patch('/agendamentos/:id/status', async (req, res, next) => {
-  await agendamentoController.atualizarStatus(req, res, next);
-});
+app.patch(
+  '/agendamentos/:id/status',
+  ensureAuthenticated,
+  requireRole(['ADMIN', 'BARBEIRO']),
+  async (req, res, next) => {
+    await agendamentoController.atualizarStatus(req, res, next);
+  }
+);
 
 /**
  * @openapi
@@ -293,6 +446,8 @@ app.patch('/agendamentos/:id/status', async (req, res, next) => {
  *   delete:
  *     summary: Cancela um agendamento (Soft Delete / status CANCELADO)
  *     tags: [Agendamentos]
+ *     security:
+ *       - bearerAuth: []
  *     parameters:
  *       - in: path
  *         name: id
@@ -306,12 +461,19 @@ app.patch('/agendamentos/:id/status', async (req, res, next) => {
  *           application/json:
  *             schema:
  *               $ref: '#/components/schemas/Agendamento'
+ *       401:
+ *         description: Não autenticado (RFC 7807).
  *       404:
  *         description: Agendamento não encontrado (RFC 7807).
  */
-app.delete('/agendamentos/:id', async (req, res, next) => {
-  await agendamentoController.cancelar(req, res, next);
-});
+app.delete(
+  '/agendamentos/:id',
+  ensureAuthenticated,
+  requireRole(['ADMIN', 'BARBEIRO', 'CLIENTE']),
+  async (req, res, next) => {
+    await agendamentoController.cancelar(req, res, next);
+  }
+);
 
 // 5. Middleware global de tratamento de erros (RFC 7807), sempre por último
 app.use(errorHandlerMiddleware);
